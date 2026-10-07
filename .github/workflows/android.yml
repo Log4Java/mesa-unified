@@ -18,7 +18,7 @@ jobs:
       - name: Install System Compilation Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build python3-pip python3-setuptools python3-mako libxrandr-dev libxxf86vm-dev libxcb-glx0-dev gettext bzip2 bison flex pkg-config zip unzip
+          sudo apt-get install -y ninja-build python3-pip python3-setuptools python3-mako libxrandr-dev libxxf86vm-dev libxcb-glx0-dev gettext bzip2 bison flex pkg-config zip unzip glslang-tools
 
       - name: Install Latest Meson Version
         run: |
@@ -26,20 +26,65 @@ jobs:
           echo "Verifying Meson Version:"
           meson --version
 
+      - name: Setup Android NDK Environment
+        id: setup-ndk
+        run: |
+          NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n 1)
+          echo "Using Android NDK at: $NDK_PATH"
+          echo "ndk_path=$NDK_PATH" >> $GITHUB_OUTPUT
+          
+          echo "NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+
+      - name: Generate Custom Android Cross-File
+        run: |
+          mkdir -p build-config/
+          
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            TARGET_ARCH="aarch64-linux-android"
+            CPU_FAMILY="aarch64"
+            CPU="armv8-a"
+          else
+            TARGET_ARCH="armv7a-linux-androideabi"
+            CPU_FAMILY="arm"
+            CPU="armv7-a"
+          fi
+          
+          cat <<EOF > build-config/android-${{ matrix.arch }}.txt
+          [constants]
+          ndk_toolchain = '${{ steps.setup-ndk.outputs.ndk_path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/'
+          
+          [binaries]
+          c = ndk_toolchain + '${TARGET_ARCH}33-clang'
+          cpp = ndk_toolchain + '${TARGET_ARCH}33-clang++'
+          ar = ndk_toolchain + 'llvm-ar'
+          strip = ndk_toolchain + 'llvm-strip'
+          pkg-config = 'pkg-config'
+          
+          [properties]
+          needs_exe_wrapper = true
+          
+          [host_machine]
+          system = 'android'
+          cpu_family = '${CPU_FAMILY}'
+          cpu = '${CPU}'
+          endian = 'little'
+          EOF
+          
+          cat build-config/android-${{ matrix.arch }}.txt
+
       - name: Compile Mesa C Source Drivers
         run: |
           echo "Compiling native graphics modules for: ${{ matrix.arch }}"
           
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            CROSS_FILE="android/mesa3d_cross.mk"
-          else
-            CROSS_FILE="android/Android.mk"
-          fi
-          
           meson setup build-output-${{ matrix.arch }} \
-            -Dbuildtype=release -Dplatforms=android -Dgallium-drivers=all -Dvulkan-drivers=[] \
-            --prefix=/opt/zink-${{ matrix.arch }} || \
-          meson setup build-output-${{ matrix.arch }} --prefix=/opt/zink-${{ matrix.arch }}
+            --cross-file build-config/android-${{ matrix.arch }}.txt \
+            -Dbuildtype=release \
+            -Dplatforms=android \
+            -Dgallium-drivers=swrast \
+            -Dvulkan-drivers=[] \
+            -Dgallium-opencl=disabled \
+            --prefix=/opt/zink-${{ matrix.arch }}
           
           ninja -C build-output-${{ matrix.arch }} install || true
 
