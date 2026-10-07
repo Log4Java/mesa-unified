@@ -81,7 +81,7 @@ jobs:
             --cross-file build-config/android-${{ matrix.arch }}.txt \
             -Dbuildtype=release \
             -Dplatforms=android \
-            -Dgallium-drivers=swrast \
+            -Dgallium-drivers=all \
             -Dvulkan-drivers=[] \
             -Dgallium-opencl=disabled \
             --prefix=/opt/zink-${{ matrix.arch }}
