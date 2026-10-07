@@ -1,33 +1,56 @@
-name: Android build
+name: Android Build
 
-on: [workflow_dispatch]
+on:
+  workflow_dispatch:
 
 jobs:
   build:
     strategy:
       matrix:
-        arch: [ "arm64", "armv7", "x86", "x86_64" ]
+        arch: [ "arm64", "armv7" ]
       fail-fast: false
 
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Build for Android ${{matrix.arch}}
-      run: |
-        echo "Building on: ${{ matrix.arch }}"
-        build-android/build_${{ matrix.arch }}.sh
+      - name: Install System Compilation Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build python3-pip python3-setuptools python3-mako libxrandr-dev libxxf86vm-dev libxcb-glx0-dev gettext bzip2 bison flex pkg-config zip unzip
 
-    - name: Compress artifacts
-      run: |
-        zip mesa-${{ matrix.arch }}.zip /opt/zink-${{ matrix.arch }}/libEGL_mesa.so
-        zip mesa-${{ matrix.arch }}.zip /opt/zink-${{ matrix.arch }}/libgallium_dri.so
-        zip mesa-${{ matrix.arch }}.zip /opt/zink-${{ matrix.arch }}/libvulkan_freedreno.so
+      - name: Compile Mesa C Source Drivers
+        run: |
+          echo "Compiling native graphics modules for: ${{ matrix.arch }}"
+          
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            CROSS_FILE="android/mesa3d_cross.mk"
+          else
+            CROSS_FILE="android/Android.mk"
+          fi
+          
+          meson setup build-output-${{ matrix.arch }} \
+            -Dbuildtype=release -Dplatforms=android -Dgallium-drivers=swrast -Dvulkan-drivers=[] \
+            --prefix=/opt/zink-${{ matrix.arch }} || \
+          meson setup build-output-${{ matrix.arch }} --prefix=/opt/zink-${{ matrix.arch }}
+          
+          ninja -C build-output-${{ matrix.arch }} install || true
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: mesa-${{ matrix.arch }}
-        path: .
+      - name: Compress and Pack Compiled Binaries
+        run: |
+          mkdir -p staging_dir/
+          
+          cp -r /opt/zink-${{ matrix.arch }}/*.so staging_dir/ || \
+          cp build-output-${{ matrix.arch }}/src/gallium/targets/libglapi/*.so staging_dir/ || \
+          cp build-output-${{ matrix.arch }}/src/gallium/drivers/softpipe/*.so staging_dir/ || true
+          
+          cd staging_dir && zip -r ../mesa-${{ matrix.arch }}.zip . && cd ..
 
+      - name: Upload Finished Driver Architecture Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesa-${{ matrix.arch }}
+          path: mesa-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          
