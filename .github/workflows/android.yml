@@ -18,7 +18,13 @@ jobs:
       - name: Install System Compilation Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build python3-pip python3-setuptools python3-mako libxrandr-dev libxxf86vm-dev libxcb-glx0-dev gettext bzip2 bison flex pkg-config zip unzip
+          sudo apt-get install -y ninja-build python3-pip python3-setuptools python3-mako libxrandr-dev libxxf86vm-dev libxcb-glx0-dev gettext bzip2 bison flex pkg-config zip unzip
+
+      - name: Install Latest Meson Version
+        run: |
+          pip3 install --upgrade meson
+          echo "Verifying Meson Version:"
+          meson --version
 
       - name: Compile Mesa C Source Drivers
         run: |
