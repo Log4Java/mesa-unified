@@ -37,7 +37,7 @@ jobs:
           fi
           
           meson setup build-output-${{ matrix.arch }} \
-            -Dbuildtype=release -Dplatforms=android -Dgallium-drivers=swrast -Dvulkan-drivers=[] \
+            -Dbuildtype=release -Dplatforms=android -Dgallium-drivers=all -Dvulkan-drivers=[] \
             --prefix=/opt/zink-${{ matrix.arch }} || \
           meson setup build-output-${{ matrix.arch }} --prefix=/opt/zink-${{ matrix.arch }}
           
